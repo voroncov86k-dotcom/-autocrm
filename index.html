@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#111111">
+<title>АвтоCRM</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display",Arial,sans-serif;background:#f5f5f7;color:#111}
+header{position:sticky;top:0;background:rgba(245,245,247,.94);backdrop-filter:blur(15px);z-index:5;padding:18px 16px 10px}
+h1{font-size:34px;margin:0 0 12px}.search{width:100%;border:0;border-radius:12px;padding:12px 14px;font-size:16px;background:#e5e5ea}
+main{padding:8px 14px 100px}.card{background:white;border-radius:16px;padding:15px;margin:10px 0;box-shadow:0 1px 3px #0001}
+.name{font-size:18px;font-weight:700}.phone{color:#555;margin-top:4px}.comment{margin-top:9px;color:#444;white-space:pre-wrap}
+.call{margin-top:12px;padding-top:10px;border-top:1px solid #eee;font-size:14px}.overdue{color:#d00}.upcoming{color:#1769d1}
+.empty{text-align:center;color:#777;margin-top:90px}.fab{position:fixed;right:20px;bottom:25px;width:58px;height:58px;border-radius:50%;border:0;background:#111;color:#fff;font-size:32px;box-shadow:0 6px 20px #0004}
+.modal{position:fixed;inset:0;background:#0006;display:none;align-items:end;z-index:10}.sheet{background:#f5f5f7;width:100%;border-radius:24px 24px 0 0;padding:20px 16px calc(20px + env(safe-area-inset-bottom));max-height:92vh;overflow:auto}
+input,textarea{width:100%;border:1px solid #ddd;border-radius:12px;padding:13px;font-size:16px;background:#fff;margin:6px 0 12px}textarea{min-height:110px;resize:vertical}
+label{font-size:13px;color:#666}.row{display:flex;gap:10px}.row>*{flex:1}.actions{display:flex;gap:10px}.btn{border:0;border-radius:12px;padding:13px 16px;font-size:16px;font-weight:600}.primary{background:#111;color:#fff}.secondary{background:#ddd;color:#111}.danger{background:#ffe5e5;color:#c00}
+.toggle{display:flex;align-items:center;justify-content:space-between;background:#fff;padding:13px;border-radius:12px;margin-bottom:12px}.toggle input{width:auto;margin:0}
+</style>
+</head>
+<body>
+<header>
+<h1>АвтоCRM</h1>
+<input id="search" class="search" placeholder="Поиск по имени или телефону">
+</header>
+<main id="list"></main>
+<button class="fab" onclick="openForm()">+</button>
+
+<div id="modal" class="modal" onclick="if(event.target===this)closeForm()">
+<div class="sheet">
+<h2 id="formTitle">Новый клиент</h2>
+<input type="hidden" id="id">
+<label>Имя клиента</label><input id="name" placeholder="Например, Александр">
+<label>Номер телефона</label><input id="phone" type="tel" placeholder="+7 900 000-00-00">
+<label>Комментарий</label><textarea id="comment" placeholder="Что интересует, какой автомобиль, бюджет, договорённости..."></textarea>
+<div class="toggle"><span>Напомнить о следующем звонке</span><input id="reminder" type="checkbox" onchange="toggleDate()"></div>
+<div id="dateBox" style="display:none">
+<label>Дата и время</label><input id="nextCall" type="datetime-local">
+</div>
+<div class="actions">
+<button class="btn secondary" onclick="closeForm()">Отмена</button>
+<button class="btn primary" onclick="saveClient()">Сохранить</button>
+</div>
+</div></div>
+
+<script>
+const KEY='autocrm_clients_v1';
+let clients=JSON.parse(localStorage.getItem(KEY)||'[]');
+
+function save(){localStorage.setItem(KEY,JSON.stringify(clients));render()}
+function esc(s){return String(s||'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
+function formatDate(v){return new Date(v).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}
+function render(){
+ const q=document.getElementById('search').value.toLowerCase();
+ const list=document.getElementById('list');
+ const arr=clients.filter(c=>(c.name+' '+c.phone).toLowerCase().includes(q)).sort((a,b)=>(a.nextCall||'9999').localeCompare(b.nextCall||'9999'));
+ if(!arr.length){list.innerHTML='<div class="empty">Клиентов пока нет.<br>Нажмите «+», чтобы добавить первого.</div>';return}
+ list.innerHTML=arr.map(c=>{
+   let call='';
+   if(c.reminder&&c.nextCall){
+     const d=new Date(c.nextCall), cls=d<new Date()?'overdue':'upcoming';
+     call=`<div class="call ${cls}">🔔 ${d<new Date()?'Позвонить сейчас':'Следующий звонок'}: ${formatDate(c.nextCall)}</div>`;
+   }
+   return `<div class="card" onclick="openForm('${c.id}')">
+      <div class="name">${esc(c.name)}</div>
+      <div class="phone"><a href="tel:${esc(c.phone)}" onclick="event.stopPropagation()">${esc(c.phone)}</a></div>
+      ${c.comment?`<div class="comment">${esc(c.comment)}</div>`:''}${call}
+   </div>`;
+ }).join('');
+}
+function openForm(id){
+ const c=clients.find(x=>x.id===id);
+ document.getElementById('modal').style.display='flex';
+ document.getElementById('formTitle').textContent=c?'Изменить клиента':'Новый клиент';
+ document.getElementById('id').value=c?.id||'';
+ document.getElementById('name').value=c?.name||'';
+ document.getElementById('phone').value=c?.phone||'';
+ document.getElementById('comment').value=c?.comment||'';
+ document.getElementById('reminder').checked=!!c?.reminder;
+ document.getElementById('nextCall').value=c?.nextCall||new Date(Date.now()+3600000).toISOString().slice(0,16);
+ toggleDate();
+}
+function closeForm(){document.getElementById('modal').style.display='none'}
+function toggleDate(){document.getElementById('dateBox').style.display=document.getElementById('reminder').checked?'block':'none'}
+function saveClient(){
+ const name=document.getElementById('name').value.trim(), phone=document.getElementById('phone').value.trim();
+ if(!name||!phone){alert('Заполните имя и номер телефона');return}
+ const id=document.getElementById('id').value||crypto.randomUUID();
+ const c={id,name,phone,comment:document.getElementById('comment').value.trim(),reminder:document.getElementById('reminder').checked,nextCall:document.getElementById('nextCall').value};
+ const i=clients.findIndex(x=>x.id===id); if(i>=0) clients[i]=c; else clients.unshift(c);
+ save(); closeForm();
+ if(c.reminder) scheduleLocalHint(c);
+}
+function scheduleLocalHint(c){
+ if('Notification' in window && Notification.permission==='default') Notification.requestPermission();
+ // Настоящие фоновые push-уведомления требуют размещения сайта по HTTPS и PWA/Web Push.
+}
+document.getElementById('search').addEventListener('input',render);
+render();
+</script>
+</body>
+</html>
